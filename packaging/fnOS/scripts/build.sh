@@ -101,8 +101,11 @@ mkdir -p "${APP_DIR}/ui/images"
 cp "${PKG_DIR}/ui/config" "${APP_DIR}/ui/config"
 cp "${PKG_DIR}/ui-images/icon_64.png"  "${APP_DIR}/ui/images/icon_64.png"
 cp "${PKG_DIR}/ui-images/icon_256.png" "${APP_DIR}/ui/images/icon_256.png"
-cp "${PKG_DIR}/ui-images/ICON.PNG"     "${STAGE}/ICON.PNG"
-cp "${PKG_DIR}/ui-images/ICON_256.PNG" "${STAGE}/ICON_256.PNG"
+# 包根的 ICON.PNG(64x64) 与 ICON_256.PNG(256x256) 按 fnOS 规范由 ui-images 派生。
+# 不在仓库里同时存放 ICON_256.PNG 与 icon_256.png —— Windows 大小写不敏感，
+# 两者会同名冲突，导致 CI checkout 后缺文件。
+cp "${PKG_DIR}/ui-images/icon_64.png"  "${STAGE}/ICON.PNG"
+cp "${PKG_DIR}/ui-images/icon_256.png" "${STAGE}/ICON_256.PNG"
 
 # ── 3. 自检 ──────────────────────────────────────────────────
 # ui/ 下不得残留 fnpack 模板占位符（否则桌面图标点了没反应）
