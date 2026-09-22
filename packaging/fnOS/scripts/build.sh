@@ -74,6 +74,10 @@ echo "[build] 运行时包：${RUNTIME_TGZ} ($(du -h "${RUNTIME_TGZ}" | cut -f1)
 
 # ── 版本号：官方包内 package.json 是单一事实来源 ───────────────
 VERSION="${ZCODE_VERSION:-}"
+if [ -z "${VERSION}" ] && [ -f "${REPO}/fnos.version" ]; then
+    # fpk 版本号（独立于上游 runtime 版本）：CI 与本地构建都读这里，保证一致
+    VERSION="$(head -n 1 "${REPO}/fnos.version" | tr -d '[:space:]')"
+fi
 if [ -z "${VERSION}" ]; then
     VERSION="$("${NODE}" -e "
 const { createRequire } = require('module');
