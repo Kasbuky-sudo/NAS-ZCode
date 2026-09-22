@@ -1,0 +1,17 @@
+# 这些文件在飞牛(Linux)上执行，必须保持 LF，否则 shebang 解析失败
+packaging/fnOS/cmd/* text eol=lf
+packaging/fnOS/scripts/* text eol=lf
+packaging/fnOS/manifest text eol=lf
+packaging/fnOS/config/* text eol=lf
+packaging/fnOS/ui/config text eol=lf
+upstream.version text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+*.yml text eol=lf
+*.md text eol=lf
+LICENSE text eol=lf
+
+# 二进制不走转换
+*.png binary
+*.fpk binary
+*.tar.gz binary

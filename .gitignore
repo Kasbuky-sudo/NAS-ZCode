@@ -1,0 +1,11 @@
+# 构建产物
+packaging/fnOS/dist/
+packaging/fnOS/.build-staging/
+out/
+
+# 评估期研究笔记（不入库）
+docs/research/
+
+# 系统
+Thumbs.db
+.DS_Store

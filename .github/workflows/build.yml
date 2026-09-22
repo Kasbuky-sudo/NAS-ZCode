@@ -1,0 +1,126 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build.yml"
+      - "upstream.version"
+      - "packaging/**"
+  workflow_dispatch:
+    inputs:
+      zcode_ref:
+        description: "ZCode ref (tag / branch / commit)，留空用 upstream.version 里钉住的值"
+        required: false
+        default: ""
+
+env:
+  NODE_VERSION: "24.14.0"
+  PNPM_VERSION: "10.33.2"
+
+jobs:
+  runtime:
+    name: Build ZCode web runtime (linux)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      sha: ${{ steps.pin.outputs.sha }}
+    steps:
+      - name: Resolve pinned ZCode ref
+        id: pin
+        run: |
+          if [ -n "${{ github.event.inputs.zcode_ref }}" ]; then
+            REF="${{ github.event.inputs.zcode_ref }}"
+          else
+            REF="$(cat upstream.version)"
+          fi
+          SHA="$(git ls-remote https://github.com/zai-org/ZCode.git "$REF" | awk '{print $1}')"
+          if [ -z "$SHA" ]; then
+            # 可能传的是 commit sha 本身
+            SHA="$REF"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Pinned ZCode commit: $SHA"
+
+      - name: Checkout ZCode at pinned commit
+        uses: actions/checkout@v4
+        with:
+          repository: zai-org/ZCode
+          ref: ${{ steps.pin.outputs.sha }}
+          path: zcode
+          fetch-depth: 1
+
+      - name: Setup Node + pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+        # Node 版本在下一步装（mise 钉 24.14.0）
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        working-directory: zcode
+        run: pnpm install --frozen-lockfile
+
+      - name: Build runtime
+        working-directory: zcode
+        run: |
+          set -e
+          pnpm --filter @zcode/cli... build
+          pnpm --filter @zcode/server build
+          pnpm --filter @zcode/web build
+          node scripts/build-zcode.mjs --base-url http://127.0.0.1/zcode/
+
+      - name: Resolve version
+        id: ver
+        working-directory: zcode
+        run: |
+          VERSION="$(node -e "process.stdout.write(require('./package.json').version)")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "ZCode version: $VERSION"
+
+      - name: Collect artifacts
+        working-directory: zcode
+        run: |
+          mkdir -p ../out
+          cp dist/zcode/releases/*/zcode-*.tar.gz ../out/
+          cp dist/zcode/latest.json ../out/ 2>/dev/null || true
+          ls -la ../out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zcode-runtime-${{ steps.ver.outputs.version }}
+          path: out/
+          retention-days: 30
+          if-no-files-found: error
+
+  fpk:
+    name: Package fnOS fpk
+    needs: runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download runtime artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: zcode-runtime-${{ needs.runtime.outputs.version }}
+          path: packaging/fnOS/dist/runtime
+
+      - name: Build fpk
+        run: bash packaging/fnOS/scripts/build.sh
+
+      - name: Verify fpk contents
+        run: |
+          FPK="$(ls packaging/fnOS/dist/zcode-*.fpk)"
+          echo "fpk: $FPK ($(du -h "$FPK" | cut -f1))"
+          tar -tzf "$FPK" | head -20
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zcode-${{ needs.runtime.outputs.version }}-fpk
+          path: packaging/fnOS/dist/zcode-*.fpk
+          retention-days: 30
+          if-no-files-found: error

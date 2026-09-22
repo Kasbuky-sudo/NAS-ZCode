@@ -1,0 +1,3 @@
+#!/bin/bash
+# 升级前：停服务。用户数据在 TRIM_PKGVAR，不受升级影响。
+exit 0

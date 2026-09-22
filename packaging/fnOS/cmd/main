@@ -1,0 +1,249 @@
+#!/bin/bash
+
+### ZCode —— 飞牛 fnOS 服务生命周期
+###
+### 原生 Node.js 应用，运行期用应用中心的 Node.js v22（manifest install_dep_apps）。
+### ZCode Web 是三个进程：bin/zcode.mjs（runner）→ server（entry-http）→ agent（zcode.cjs）。
+### runner 自己会 spawn 子进程，且平台不保证回收孤儿，所以 stop 必须按
+### 绝对路径 pattern 兜底清理，覆盖全部三个进程。
+###
+### ⚠️ node 的查找不挑卷：应用/依赖可能装在任意存储空间（/vol1、/vol2、…），
+### find_node 首选 /var/apps 统一视图，再兜底全卷 glob。绝不写死 /vol1。
+###
+### status 约定：运行中 exit 0，未运行 exit 3（不是 1）。
+
+APP="zcode"
+RUNNER="runtime/bin/zcode.mjs"
+PORT="${TRIM_SERVICE_PORT:-8988}"
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+
+### TRIM_APPDEST 兜底：必须落到 target 链接指向的真目录。
+### /var/apps/<app> 本身是真目录，readlink -f 不穿透它 —— 拿它当 APPDEST 会拼出
+### 不存在的路径，status/stop 会静默失效。
+if [ -z "${TRIM_APPDEST}" ]; then
+    if [ -d "/var/apps/${APP}/target" ]; then
+        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}/target")"
+    else
+        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}")"
+    fi
+fi
+: "${TRIM_PKGVAR:=/var/apps/${APP}/var}"
+: "${TRIM_USERNAME:=${APP}}"
+: "${TRIM_GROUPNAME:=${TRIM_USERNAME}}"
+
+APP_DIR="${TRIM_APPDEST}"
+DATA_DIR="${TRIM_PKGVAR}/data"
+
+### 进程识别：runner/server/agent 的 argv 都含 ${APP_DIR}/runtime，
+### 用它做绝对路径匹配，绝不误伤 NAS 上其他 node 进程。
+PATTERN="${APP_DIR}/runtime"
+ENTRY="${APP_DIR}/${RUNNER}"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "${LOG_FILE}"
+}
+
+### 进程存活判定以 /proc 为准。
+### 不用 kill -0：非属主调用时它对活着的进程返回 EPERM，与"不存在"无法区分，
+### 会把 pidfile 误删（而 pidfile 是 fnOS 判定服务状态的依据）。
+pid_alive() {
+    local pid="$1" cmd state
+    [ -n "${pid}" ] || return 1
+    [ -d "/proc/${pid}" ] || return 1
+    state="$(cut -d' ' -f3 "/proc/${pid}/stat" 2>/dev/null)"
+    [ "${state}" = "Z" ] && return 1
+    cmd="$(tr '\0' ' ' < "/proc/${pid}/cmdline" 2>/dev/null)"
+    [ -z "${cmd}" ] && return 0
+    case "${cmd}" in *"${PATTERN}"*) return 0 ;; esac
+    return 1
+}
+
+### 只认本应用自己的进程（绝对路径匹配）。
+### pgrep/pkill 的 pattern 前必须加 --，否则会被 procps 当成选项。
+own_pids() {
+    pgrep -f -- "${PATTERN}" 2>/dev/null
+}
+
+read_pid() {
+    [ -r "${PID_FILE}" ] && head -n 1 "${PID_FILE}" | tr -d '[:space:]'
+}
+
+find_node() {
+    local d p
+    # 首选 /var/apps 统一视图（跨卷有效，target 指向真实安装目录），
+    # 再兜底旧固定路径 → PATH → 全卷 glob。
+    for d in /var/apps/nodejs_v22/target/bin/node /var/apps/nodejs_v22/bin/node; do
+        [ -x "${d}" ] && { printf '%s' "${d}"; return 0; }
+    done
+    [ -x "/vol1/@appcenter/nodejs_v22/bin/node" ] && { printf '%s' "/vol1/@appcenter/nodejs_v22/bin/node"; return 0; }
+    p="$(command -v node 2>/dev/null)" && [ -x "${p}" ] && { printf '%s' "${p}"; return 0; }
+    for d in /vol*/@appcenter/nodejs_v*/bin/node; do
+        [ -x "${d}" ] && { printf '%s' "${d}"; return 0; }
+    done
+    return 1
+}
+
+### 访问 token：首启生成一次，存 PKGVAR，重启不换。
+ensure_token() {
+    local f="${TRIM_PKGVAR}/etc/token"
+    [ -s "${f}" ] && return 0
+    mkdir -p "$(dirname "${f}")"
+    head -c 24 /dev/urandom | base64 | tr -d '\n' > "${f}"
+    chmod 600 "${f}" 2>/dev/null || true
+}
+
+### 工作区：优先 TRIM_DATA_SHARE_PATHS 里名为 zcode/workspace 的共享目录，
+### 否则第一个共享路径，最终兜底 PKGVAR/workspace。
+resolve_workspace() {
+    local p
+    if [ -n "${TRIM_DATA_SHARE_PATHS}" ]; then
+        local IFS=':'
+        for p in ${TRIM_DATA_SHARE_PATHS}; do
+            case "${p}" in */zcode/workspace) printf '%s' "${p}"; return 0 ;; esac
+        done
+        for p in ${TRIM_DATA_SHARE_PATHS}; do
+            [ -n "${p}" ] && { printf '%s' "${p}"; return 0; }
+        done
+    fi
+    printf '%s' "${TRIM_PKGVAR}/workspace"
+}
+
+port_listening() {
+    grep -q ":$(printf '%04X' "${PORT}")" /proc/net/tcp 2>/dev/null
+}
+
+start_process() {
+    if status > /dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ ! -f "${ENTRY}" ]; then
+        log_msg "启动失败：找不到 ${ENTRY}"
+        echo "应用文件缺失：${ENTRY}" > "${TRIM_TEMP_LOGFILE}"
+        return 1
+    fi
+
+    local node
+    if ! node="$(find_node)"; then
+        log_msg "启动失败：找不到 Node.js 运行时"
+        echo "未找到 Node.js 运行时，请确认应用中心已安装 Node.js v22" > "${TRIM_TEMP_LOGFILE}"
+        return 1
+    fi
+
+    local ws
+    ws="$(resolve_workspace)"
+    mkdir -p "${ws}" "${DATA_DIR}" "$(dirname "${PID_FILE}")" "${TRIM_PKGVAR}/log"
+    ensure_token
+    chmod +x "${node}" 2>/dev/null || true
+
+    local version
+    version="$(cat "${APP_DIR}/runtime/package.json" 2>/dev/null | grep -oE '"version": "[^"]+"' | head -1 | cut -d'"' -f4)"
+    log_msg "Starting ZCode ${version:-?} ..."
+    log_msg "NODE=${node}  APP_DIR=${APP_DIR}  DATA=${DATA_DIR}  WS=${ws}  PORT=${PORT}"
+
+    # 环境变量写进 bash -c 内部：runuser 会清掉外层环境。
+    # exec 让 runner 取代 bash 成为本进程，PID 文件里的就是 runner 本人；
+    # HOME 指到 PKGVAR，ZCode 的配置与凭据随应用目录持久化，升级不丢。
+    # --no-open：NAS 上没有浏览器可开；--token 强制鉴权（0.0.0.0 暴露 agent + 终端）。
+    local CMD
+    CMD="cd '${APP_DIR}' && exec env \
+HOME='${TRIM_PKGVAR}' \
+ZCODE_DATA_BASE_DIR='${DATA_DIR}' \
+'${node}' '${ENTRY}' --web \
+  --host 0.0.0.0 --port '${PORT}' \
+  --workspace '${ws}' --no-open \
+  --token \"\$(cat '${TRIM_PKGVAR}/etc/token')\""
+
+    if [ "$(id -un)" = "${TRIM_USERNAME}" ]; then
+        bash -c "${CMD}" >> "${LOG_FILE}" 2>&1 &
+    else
+        runuser -u "${TRIM_USERNAME}" -- bash -c "${CMD}" >> "${LOG_FILE}" 2>&1 &
+    fi
+    printf "%s" "$!" > "${PID_FILE}"
+
+    # 等端口真正监听再交差。ZCode 首启要拉起 3 个进程，比单进程应用慢，
+    # 上限放到 55s（应用中心健康门限约 60s，必须赶在它前面就绪）。
+    local i=0
+    while [ "${i}" -lt 55 ]; do
+        if port_listening; then
+            log_msg "started, port ${PORT} 已监听 (PID=$(cat "${PID_FILE}" 2>/dev/null))"
+            return 0
+        fi
+        pid_alive "$(read_pid)" || { log_msg "警告：进程提前退出，详见日志"; return 1; }
+        sleep 1
+        i=$((i + 1))
+    done
+    # 起慢一点不算失败：进程还活着就让 fnOS 再探测，避免被超时逻辑杀掉重来抢端口。
+    if pid_alive "$(read_pid)"; then
+        log_msg "警告：${PORT} 暂未监听但进程存活，交由应用中心继续探测"
+        return 0
+    fi
+    log_msg "警告：进程已退出且 ${PORT} 未监听，请查看应用日志"
+    return 1
+}
+
+stop_process() {
+    log_msg "Stopping process ..."
+
+    local pid
+    pid="$(read_pid)"
+    if [ -n "${pid}" ]; then
+        if pid_alive "${pid}"; then
+            log_msg "send TERM signal to PID:${pid} ..."
+            kill -TERM "${pid}" 2>/dev/null || true
+            local count=0
+            while pid_alive "${pid}" && [ "${count}" -lt 12 ]; do
+                sleep 1
+                count=$((count + 1))
+            done
+            if pid_alive "${pid}"; then
+                log_msg "send KILL signal to PID:${pid} ..."
+                kill -KILL "${pid}" 2>/dev/null || true
+            fi
+        else
+            log_msg "pid ${pid} 已不存在"
+        fi
+        rm -f "${PID_FILE}"
+    fi
+
+    # 兜底：runner 的子进程（server/agent）可能还活着（pidfile 只记 runner）。
+    # 按绝对路径 pattern 清理，TERM → KILL。
+    if own_pids > /dev/null 2>&1; then
+        log_msg "清理残留进程 (${PATTERN})"
+        pkill -TERM -f -- "${PATTERN}" 2>/dev/null || true
+        sleep 1
+        pkill -KILL -f -- "${PATTERN}" 2>/dev/null || true
+    fi
+
+    log_msg "process stopped"
+    return 0
+}
+
+status() {
+    local pid
+    pid="$(read_pid)"
+    if [ -n "${pid}" ] && pid_alive "${pid}"; then
+        return 0
+    fi
+    # pidfile 所指进程确实不存在才清理；权限受限（读不到 cmdline）一律留着
+    if [ -n "${pid}" ] && [ ! -d "/proc/${pid}" ]; then
+        rm -f "${PID_FILE}"
+    fi
+    # pidfile 丢了但进程还在（异常重启后常见）——重新认领，避免 stop 失效
+    pid="$(own_pids | head -n 1)"
+    if [ -n "${pid}" ] && pid_alive "${pid}"; then
+        printf "%s" "${pid}" > "${PID_FILE}" 2>/dev/null || true
+        return 0
+    fi
+    return 1
+}
+
+case "$1" in
+    start)   start_process ;;
+    stop)    stop_process ;;
+    restart) stop_process; sleep 1; start_process ;;
+    status)  if status; then exit 0; else exit 3; fi ;;
+    *)       exit 1 ;;
+esac

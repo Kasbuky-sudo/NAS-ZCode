@@ -1,0 +1,18 @@
+#!/bin/bash
+# 升级后：重新补齐可执行位（新包覆盖了 runtime），启动由系统负责。
+set -e
+
+APP="zcode"
+if [ -z "${TRIM_APPDEST}" ]; then
+    if [ -d "/var/apps/${APP}/target" ]; then
+        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}/target")"
+    else
+        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}")"
+    fi
+fi
+
+RUNNER="${TRIM_APPDEST}/runtime/bin/zcode.mjs"
+[ -f "${RUNNER}" ] && chmod +x "${RUNNER}" 2>/dev/null || true
+find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null || true
+[ -d "${TRIM_APPDEST}/runtime/agent" ] && chmod +x "${TRIM_APPDEST}/runtime/agent/"*.cjs 2>/dev/null || true
+exit 0
