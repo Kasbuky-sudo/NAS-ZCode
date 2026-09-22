@@ -1,5 +1,6 @@
 #!/bin/bash
-# 升级后：重新补齐可执行位（新包覆盖了 runtime），启动由系统负责。
+# 升级后：新包的 ui/config 覆盖了旧文件，这里重新把当前令牌写回入口 URL，
+# 并补齐 runtime 可执行位。用户数据（含令牌）保留在 TRIM_PKGVAR。
 set -e
 
 APP="zcode"
@@ -15,4 +16,23 @@ RUNNER="${TRIM_APPDEST}/runtime/bin/zcode.mjs"
 [ -f "${RUNNER}" ] && chmod +x "${RUNNER}" 2>/dev/null || true
 find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null || true
 [ -d "${TRIM_APPDEST}/runtime/agent" ] && chmod +x "${TRIM_APPDEST}/runtime/agent/"*.cjs 2>/dev/null || true
+
+TOKEN_FILE="${TRIM_PKGVAR}/etc/token"
+mkdir -p "${TRIM_PKGVAR}/etc"
+if [ -n "${wizard_token:-}" ]; then
+    TOKEN="${wizard_token}"
+elif [ -s "${TOKEN_FILE}" ]; then
+    TOKEN="$(cat "${TOKEN_FILE}")"
+else
+    TOKEN="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
+fi
+printf '%s' "${TOKEN}" > "${TOKEN_FILE}"
+chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
+
+UI_CONFIG="${TRIM_APPDEST}/ui/config"
+if [ -f "${UI_CONFIG}" ]; then
+    sed -i "s|__ZCODE_TOKEN__|${TOKEN}|g" "${UI_CONFIG}" 2>/dev/null || true
+fi
+
+chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" 2>/dev/null || true
 exit 0

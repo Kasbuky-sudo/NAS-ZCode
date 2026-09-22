@@ -1,5 +1,5 @@
 #!/bin/bash
-# 安装后：确认 runtime 就位、准备数据目录，并落地初始访问令牌。
+# 安装后：确认 runtime 就位、准备数据目录，并把访问令牌落地到 ui/config。
 set -e
 
 APP="zcode"
@@ -25,17 +25,26 @@ find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null |
 
 mkdir -p "${TRIM_PKGVAR}/data" "${TRIM_PKGVAR}/etc" "${TRIM_PKGVAR}/log" "${TRIM_PKGVAR}/workspace"
 
-### 访问令牌：向导 wizard_token 是单一事实来源。
-### 用户在安装向导里留空时，这里生成随机值；否则保存用户填的值。
-### 写入 token.current 供 cmd/main（启动时 --token）与应用设置页（wizard/config
-### 的 initValue 无法动态注入，用户可在应用设置里查看/修改）使用。
+### 访问令牌（唯一事实来源 = ${TRIM_PKGVAR}/etc/token）
+### 1) 向导填了 wizard_token → 用它
+### 2) 否则沿用已有 token（升级/重装场景，避免令牌漂移）
+### 3) 都没有 → 生成随机值
+### 生成后立刻写进 ui/config 的入口 URL，面板点开即自动带 token 完成鉴权。
 TOKEN_FILE="${TRIM_PKGVAR}/etc/token"
 if [ -n "${wizard_token:-}" ]; then
-    printf '%s' "${wizard_token}" > "${TOKEN_FILE}"
+    TOKEN="${wizard_token}"
+elif [ -s "${TOKEN_FILE}" ]; then
+    TOKEN="$(cat "${TOKEN_FILE}")"
 else
-    printf '%s' "$(head -c 24 /dev/urandom | base64 | tr -d '\n')" > "${TOKEN_FILE}"
+    TOKEN="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
 fi
+printf '%s' "${TOKEN}" > "${TOKEN_FILE}"
 chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
+
+UI_CONFIG="${TRIM_APPDEST}/ui/config"
+if [ -f "${UI_CONFIG}" ]; then
+    sed -i "s|__ZCODE_TOKEN__|${TOKEN}|g" "${UI_CONFIG}" 2>/dev/null || true
+fi
 
 chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" "${TRIM_PKGETC}" 2>/dev/null || true
 exit 0
