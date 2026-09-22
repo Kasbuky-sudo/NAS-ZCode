@@ -39,23 +39,14 @@ jobs:
           fi
           REF="$(echo "$REF" | head -n 1 | tr -d '[:space:]')"
           echo "Pinned ZCode ref: $REF"
-          SHA="$REF"
-          case "$REF" in
-            # 已是 commit sha 则直接用；否则当作分支/tag 解析（上游没有 release tag，
-            # upstream.version 应始终钉 40 位 commit sha）
-            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f])
-              if [ ${#REF} -eq 40 ]; then
-                :
-              else
-                SHA="$(git ls-remote https://github.com/zai-org/ZCode.git "$REF" | awk '{print $1}')"
-                [ -n "$SHA" ] || SHA="$REF"
-              fi
-              ;;
-            *)
-              SHA="$(git ls-remote https://github.com/zai-org/ZCode.git "$REF" | awk '{print $1}')"
-              [ -n "$SHA" ] || { echo "ref 不存在：$REF"; exit 1; }
-              ;;
-          esac
+          # upstream.version 应始终钉 40 位 commit sha（上游无 release tag）；
+          # 也兼容分支/tag 名。注意 git ls-remote 无法解析裸 SHA，要先判长度。
+          if [ "${#REF}" -eq 40 ] && [[ "$REF" =~ ^[0-9a-f]+$ ]]; then
+            SHA="$REF"
+          else
+            SHA="$(git ls-remote https://github.com/zai-org/ZCode.git "$REF" | awk '{print $1}')"
+            [ -n "$SHA" ] || { echo "ref 不存在：$REF"; exit 1; }
+          fi
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           echo "Pinned ZCode commit: $SHA"
 
