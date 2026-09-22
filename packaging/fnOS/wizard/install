@@ -1,0 +1,23 @@
+[
+  {
+    "stepTitle": "访问令牌",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "ZCode 等于把一个能执行命令的 AI agent 和终端开在 8988 端口上。访问令牌用于防止局域网内其他设备直接使用。桌面图标会自动携带令牌，无需手动输入。"
+      },
+      {
+        "type": "text",
+        "field": "wizard_token",
+        "label": "访问令牌",
+        "initValue": "",
+        "rules": [
+          {
+            "required": true,
+            "message": "访问令牌不能为空（建议使用随机长字符串）"
+          }
+        ]
+      }
+    ]
+  }
+]

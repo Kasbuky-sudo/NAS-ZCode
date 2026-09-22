@@ -1,5 +1,5 @@
 #!/bin/bash
-# 安装后：确认 runtime 就位、准备数据目录与权限。
+# 安装后：确认 runtime 就位、准备数据目录，并落地初始访问令牌。
 set -e
 
 APP="zcode"
@@ -24,5 +24,18 @@ find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null |
 [ -d "${TRIM_APPDEST}/runtime/agent" ] && chmod +x "${TRIM_APPDEST}/runtime/agent/"*.cjs 2>/dev/null || true
 
 mkdir -p "${TRIM_PKGVAR}/data" "${TRIM_PKGVAR}/etc" "${TRIM_PKGVAR}/log" "${TRIM_PKGVAR}/workspace"
+
+### 访问令牌：向导 wizard_token 是单一事实来源。
+### 用户在安装向导里留空时，这里生成随机值；否则保存用户填的值。
+### 写入 token.current 供 cmd/main（启动时 --token）与应用设置页（wizard/config
+### 的 initValue 无法动态注入，用户可在应用设置里查看/修改）使用。
+TOKEN_FILE="${TRIM_PKGVAR}/etc/token"
+if [ -n "${wizard_token:-}" ]; then
+    printf '%s' "${wizard_token}" > "${TOKEN_FILE}"
+else
+    printf '%s' "$(head -c 24 /dev/urandom | base64 | tr -d '\n')" > "${TOKEN_FILE}"
+fi
+chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
+
 chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" "${TRIM_PKGETC}" 2>/dev/null || true
 exit 0

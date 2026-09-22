@@ -17,4 +17,4 @@ service_port          = 8988
 install_dep_apps      = nodejs_v22
 ctl_stop              = true
 checkport             = true
-changelog             = 首个飞牛 fnOS 原生打包版本。基于 ZCode v3.14.1 的 Web 运行时（zcode --web）：Agent 对话 + 工作区 + 内置终端，服务端权威，浏览器关闭后任务继续；iframe 内打开，监听端口 8988。
+changelog             = 修复面板打开后 WebSocket 连接失败（ws://…:8988/ws 401）：桌面入口改为自动携带访问令牌（?token=），首次加载即完成鉴权。访问令牌可在应用设置中查看与修改（留空保持不变），修改后重启应用生效。

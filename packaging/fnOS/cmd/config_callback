@@ -1,2 +1,19 @@
 #!/bin/bash
+# 配置变更后：向导（应用设置）提交的 wizard_token 落盘。
+# 令牌变化在下次启动生效（应用中心重启应用即可）。
+set -e
+
+APP="zcode"
+if [ -z "${TRIM_PKGVAR}" ]; then
+    if [ -d "/var/apps/${APP}/var" ]; then
+        TRIM_PKGVAR="$(readlink -f "/var/apps/${APP}/var")"
+    fi
+fi
+
+if [ -n "${wizard_token:-}" ]; then
+    mkdir -p "${TRIM_PKGVAR}/etc"
+    printf '%s' "${wizard_token}" > "${TRIM_PKGVAR}/etc/token"
+    chmod 600 "${TRIM_PKGVAR}/etc/token" 2>/dev/null || true
+    chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}/etc" 2>/dev/null || true
+fi
 exit 0

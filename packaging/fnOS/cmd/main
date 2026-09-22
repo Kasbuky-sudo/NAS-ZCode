@@ -85,12 +85,21 @@ find_node() {
     return 1
 }
 
-### 访问 token：首启生成一次，存 PKGVAR，重启不换。
+### 访问令牌：单一事实来源是向导字段 wizard_token（环境变量传入，install_callback
+### 已把终值落盘到 etc/token）。cmd/main 只兜底：文件缺失且向导值存在时补写。
+### 服务端 --token 用文件里的值；入口 URL 用 ui/config 里的 ${wizard_token}（安装时
+### 已替换为同一值）。config 向导改 token → config_callback 落盘 → 重启生效。
 ensure_token() {
     local f="${TRIM_PKGVAR}/etc/token"
-    [ -s "${f}" ] && return 0
+    if [ -s "${f}" ]; then
+        return 0
+    fi
+    local t="${wizard_token:-}"
+    if [ -z "${t}" ]; then
+        t="$(head -c 24 /dev/urandom | base64 | tr -d '\n')"
+    fi
     mkdir -p "$(dirname "${f}")"
-    head -c 24 /dev/urandom | base64 | tr -d '\n' > "${f}"
+    printf '%s' "${t}" > "${f}"
     chmod 600 "${f}" 2>/dev/null || true
 }
 
@@ -114,6 +123,13 @@ port_listening() {
     grep -q ":$(printf '%04X' "${PORT}")" /proc/net/tcp 2>/dev/null
 }
 
+### 面板入口说明（写给排查的人）：
+### ui/config 的 url 是 "/?token=${wizard_token}"，fnOS 安装时把向导值填进去。
+### 服务端（entry-http）只对 /ws、/ws/*、/api/* 做 token 鉴权；GET /?token= 命中
+### 后种 zcode_lite_token cookie（SameSite=Lax，端口不参与 same-site 判定，
+### 所以面板 iframe 内可携带），之后的 WS 握手凭 cookie 通过。
+### token 改动路径：应用设置（wizard/config）→ config_callback 落盘 → 重启生效。
+
 start_process() {
     if status > /dev/null 2>&1; then
         return 0
@@ -134,7 +150,7 @@ start_process() {
 
     local ws
     ws="$(resolve_workspace)"
-    mkdir -p "${ws}" "${DATA_DIR}" "$(dirname "${PID_FILE}")" "${TRIM_PKGVAR}/log"
+    mkdir -p "${ws}" "${DATA_DIR}" "$(dirname "${PID_FILE}")" "${TRIM_PKGVAR}/log" "${TRIM_PKGVAR}/etc"
     ensure_token
     chmod +x "${node}" 2>/dev/null || true
 
@@ -146,7 +162,10 @@ start_process() {
     # 环境变量写进 bash -c 内部：runuser 会清掉外层环境。
     # exec 让 runner 取代 bash 成为本进程，PID 文件里的就是 runner 本人；
     # HOME 指到 PKGVAR，ZCode 的配置与凭据随应用目录持久化，升级不丢。
-    # --no-open：NAS 上没有浏览器可开；--token 强制鉴权（0.0.0.0 暴露 agent + 终端）。
+    # --no-open：NAS 上没有浏览器可开；--token 用 wizard_token（入口 URL 同源，
+    # iframe 首次 GET /?token= 命中后服务端种 zcode_lite_token cookie，/ws 即放行）。
+    local token
+    token="$(cat "${TRIM_PKGVAR}/etc/token")"
     local CMD
     CMD="cd '${APP_DIR}' && exec env \
 HOME='${TRIM_PKGVAR}' \
@@ -154,7 +173,7 @@ ZCODE_DATA_BASE_DIR='${DATA_DIR}' \
 '${node}' '${ENTRY}' --web \
   --host 0.0.0.0 --port '${PORT}' \
   --workspace '${ws}' --no-open \
-  --token \"\$(cat '${TRIM_PKGVAR}/etc/token')\""
+  --token '${token}'"
 
     if [ "$(id -un)" = "${TRIM_USERNAME}" ]; then
         bash -c "${CMD}" >> "${LOG_FILE}" 2>&1 &
