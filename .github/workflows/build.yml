@@ -28,12 +28,17 @@ jobs:
     steps:
       - name: Resolve pinned ZCode ref
         id: pin
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "${{ github.event.inputs.zcode_ref }}" ]; then
             REF="${{ github.event.inputs.zcode_ref }}"
           else
-            REF="$(cat upstream.version)"
+            REF="$(curl -fsSL -H "Authorization: token $GH_TOKEN" \
+              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/upstream.version")"
           fi
+          REF="$(echo "$REF" | head -n 1 | tr -d '[:space:]')"
+          echo "Pinned ZCode ref: $REF"
           SHA="$(git ls-remote https://github.com/zai-org/ZCode.git "$REF" | awk '{print $1}')"
           if [ -z "$SHA" ]; then
             # 可能传的是 commit sha 本身
