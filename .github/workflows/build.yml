@@ -76,9 +76,12 @@ jobs:
         working-directory: zcode
         run: |
           set -e
-          # build:zcode = 官方打包入口：先 pnpm --filter "@zcode/cli..." build（含全部
-          # 依赖包），再构建 server/web，最后组装 runtime tarball。手工拆步会漏掉
-          # @zcode/shared 等被 TUI runtime 收录的包（Missing @zcode/shared dist files）。
+          # packages/{shared,services,client} 没有 build 脚本，其 dist 由根 typecheck
+          # （tsc -b，composite 工程会真实产出 JS）生成；TUI runtime 闭包收集器要求
+          # 这些 dist 存在，否则报 Missing @zcode/shared dist files。
+          pnpm typecheck
+          # build:zcode = 官方打包入口：先构建 CLI 及依赖，再构建 server/web，
+          # 最后组装 runtime tarball。
           node scripts/build-zcode.mjs --base-url http://127.0.0.1/zcode/
 
       - name: Resolve version
