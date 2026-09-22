@@ -76,9 +76,9 @@ jobs:
         working-directory: zcode
         run: |
           set -e
-          pnpm --filter @zcode/cli... build
-          pnpm --filter @zcode/server build
-          pnpm --filter @zcode/web build
+          # build:zcode = 官方打包入口：先 pnpm --filter "@zcode/cli..." build（含全部
+          # 依赖包），再构建 server/web，最后组装 runtime tarball。手工拆步会漏掉
+          # @zcode/shared 等被 TUI runtime 收录的包（Missing @zcode/shared dist files）。
           node scripts/build-zcode.mjs --base-url http://127.0.0.1/zcode/
 
       - name: Resolve version
