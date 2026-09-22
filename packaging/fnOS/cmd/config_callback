@@ -1,34 +1,21 @@
 #!/bin/bash
-# 配置变更后：向导（应用设置）提交的 wizard_token 落盘，并同步到面板入口 URL。
-# 令牌变化在下次启动生效（应用中心重启应用即可）。
+# 配置变更后：应用设置里改的访问令牌落盘，供 cmd/main 启动时 --token 使用。
+# 入口 URL 由 fnOS 依据向导值 wizard_path 自动生成（ui/config 的 url 就是
+# /?token=${wizard_path}），因此这里不必改任何文件。
 set -e
 
 APP="zcode"
 if [ -z "${TRIM_PKGVAR}" ] && [ -d "/var/apps/${APP}/var" ]; then
     TRIM_PKGVAR="$(readlink -f "/var/apps/${APP}/var")"
 fi
-if [ -z "${TRIM_APPDEST}" ]; then
-    if [ -d "/var/apps/${APP}/target" ]; then
-        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}/target")"
-    else
-        TRIM_APPDEST="$(readlink -f "/var/apps/${APP}")"
-    fi
-fi
 
-if [ -z "${wizard_token:-}" ]; then
+TOKEN="${wizard_path:-${wizard_token:-}}"
+if [ -z "${TOKEN}" ]; then
     exit 0
 fi
 
 mkdir -p "${TRIM_PKGVAR}/etc"
-printf '%s' "${wizard_token}" > "${TRIM_PKGVAR}/etc/token"
+printf '%s' "${TOKEN}" > "${TRIM_PKGVAR}/etc/token"
 chmod 600 "${TRIM_PKGVAR}/etc/token" 2>/dev/null || true
-
-UI_CONFIG="${TRIM_APPDEST}/ui/config"
-if [ -f "${UI_CONFIG}" ]; then
-    sed -i "s|__ZCODE_TOKEN__|${wizard_token}|g" "${UI_CONFIG}" 2>/dev/null || true
-    # 已经是上一次替换后的 URL：直接换成新令牌
-    sed -i "s|/?token=[A-Za-z0-9]*|/?token=${wizard_token}|g" "${UI_CONFIG}" 2>/dev/null || true
-fi
-
-chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" 2>/dev/null || true
+chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}/etc" 2>/dev/null || true
 exit 0

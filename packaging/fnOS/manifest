@@ -17,4 +17,4 @@ service_port          = 8988
 install_dep_apps      = nodejs_v22
 ctl_stop              = true
 checkport             = true
-changelog             = 修复面板打开后 WebSocket 连接失败（ws://…:8988/ws 401）：桌面入口改为自动携带访问令牌（?token=），首次加载即完成鉴权。访问令牌可在应用设置中查看与修改（留空保持不变），修改后重启应用生效。
+changelog             = 修复面板打开后 WebSocket 连接失败（ws://…:8988/ws 401）。根因：服务端只放行静态页、/ws 与 /api 需鉴权，而面板入口 URL 没带令牌。现改为：安装向导填写访问令牌（字段 wizard_path，可留空则自动生成），fnOS 把令牌替换进入口路径，页面加载后自动种鉴权 cookie，桌面图标点开即用。

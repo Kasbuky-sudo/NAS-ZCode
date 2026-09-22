@@ -4,17 +4,20 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "ZCode 等于把一个能执行命令的 AI agent 和终端开在 8988 端口上。访问令牌用于防止局域网内其他设备直接使用。桌面图标会自动携带令牌，无需手动输入。"
+        "helpText": "ZCode 把一个能执行命令的 AI agent 和终端开在 8988 端口上，访问令牌用于防止局域网内其他设备直接使用。请随便填一串字符（越随机越好，例如 16 位以上字母数字）；桌面图标会自动携带该令牌，平时无需手输。字段名 wizard_path 对应 fnOS 的入口 URL 占位符 ${wizard_path}，这是入口自动带令牌的机制。"
       },
       {
         "type": "text",
-        "field": "wizard_token",
+        "field": "wizard_path",
         "label": "访问令牌",
-        "initValue": "",
         "rules": [
           {
             "required": true,
-            "message": "访问令牌不能为空（建议使用随机长字符串）"
+            "message": "请填写访问令牌（任选一串随机字符即可）"
+          },
+          {
+            "pattern": "^[A-Za-z0-9_-]{8,64}$",
+            "message": "请使用 8-64 位字母、数字、下划线或中划线（避免 URL 特殊字符）"
           }
         ]
       }

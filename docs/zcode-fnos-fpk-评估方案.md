@@ -167,7 +167,7 @@ ZCODE_FPK_APP='${TRIM_APPNAME}' \
 
 你的其他应用是"登录态在应用内"的形态，ZCode Web 则是**直接暴露 agent + 终端**。三个选项：
 
-1. **wizard token（建议默认）**：`wizard/` 放一个 `wizard_token` 字段，`ui/config` 里写 `"url": "/?token=${wizard_token}"`，`cmd/main` 用同一个值传 `--token`。飞牛支持 `${wizard_*}` 占位符（需确认你目标系统版本上的实际行为与字段命名规则）。
+1. **入口路径令牌（已落地，真机验证通过）**：`wizard/install` 用字段 `wizard_path`（标签「访问令牌」，必填 8-64 位），`ui/config` 写 `"url": "/${wizard_path}"` —— fnOS 把向导值替换进**路径**（查询串会被丢弃），页面加载时由打包阶段注入 `web/index.html` 的一小段脚本把路径首段写进 `zcode_lite_token` cookie，服务端对 `/ws`、`/api` 的鉴权接受该 cookie，于是面板 iframe 点开即用。`cmd/main` 用 `--token` 传同一个值（来源 `${TRIM_PKGVAR}/etc/token`）。实测：`GET /<token>` 种 cookie → `ws://…:8988/ws` 返回 101，不带令牌仍 401。
 2. **固定 token**：构建期生成一个写入 `ui/config` 和脚本（所有安装实例相同，弱，但零依赖）。
 3. **不加 token**：绑 `0.0.0.0` 直接开放，靠内网 + 防火墙。**与你的其他应用一致但风险最高**，ZCode 的能力边界远大于音乐/游戏应用，不建议。
 

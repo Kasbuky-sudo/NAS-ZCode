@@ -106,6 +106,10 @@ for f in bin/zcode.mjs server/entry-http.js agent/zcode.cjs web/index.html packa
 done
 echo "[build] runtime 完整性 ✓ ($(du -sh "${APP_DIR}/runtime" | cut -f1))"
 
+### 入口令牌：面板入口是 /<token>（fnOS 把向导值当路径替换，查询串会被丢掉），
+### 页面加载后需把路径首段写进 zcode_lite_token cookie，否则 /ws 握手 401。
+python3 "${HERE}/inject-entry-token.py" "$(winpath "${APP_DIR}/runtime/web/index.html")"
+
 # ── 2. 桌面入口（ui 必须在 app/ 内）──────────────────────────
 mkdir -p "${APP_DIR}/ui/images"
 cp "${PKG_DIR}/ui/config" "${APP_DIR}/ui/config"
@@ -136,12 +140,28 @@ echo "[build] 写 manifest"
 sed "s/^version  *=.*/version               = ${VERSION}/" \
     "${PKG_DIR}/manifest" > "${STAGE}/manifest"
 
+### DEP_APPS=none 变体：剥离 install_dep_apps 声明。
+### 用途：真机验收 / 依赖应用已装好时绕过 App Center 的依赖变更拦截
+### （trim-cli 对声明依赖的本地 fpk 会要求走 UI）。Node 运行时仍由
+### cmd/main 的 find_node 跨卷解析拿应用中心的 nodejs_v22。
+VARIANT=""
+if [ "${DEP_APPS:-nodejs_v22}" = "none" ]; then
+    grep -v '^install_dep_apps' "${STAGE}/manifest" > "${STAGE}/manifest.tmp"
+    mv "${STAGE}/manifest.tmp" "${STAGE}/manifest"
+    VARIANT="-nodep"
+    echo "[build] 变体：已移除 install_dep_apps 声明"
+fi
+
 cp -r "${PKG_DIR}/cmd"    "${STAGE}/cmd"
 cp -r "${PKG_DIR}/config" "${STAGE}/config"
+# wizard/ 必需：安装向导（访问令牌）与应用设置页（wizard/config）都由它提供；
+# 漏拷会让 App Center 读不到向导内容（install 时 wizardContent=null），
+# 面板入口也就拿不到 ${wizard_path} 的值。
+cp -r "${PKG_DIR}/wizard" "${STAGE}/wizard"
 chmod 755 "${STAGE}/cmd/"*
 
 # ── 5. 打包 ──────────────────────────────────────────────────
-FINAL="${DIST}/zcode-${VERSION}.fpk"
+FINAL="${DIST}/zcode-${VERSION}${VARIANT}.fpk"
 rm -f "${FINAL}"
 
 if [ -n "${FNPACK}" ]; then
@@ -160,7 +180,7 @@ else
     cp "${APP_TGZ}" "${STAGE}/app.tgz"
     rm -f "${APP_TGZ}"
     ( cd "${STAGE}" && tar -czf "${FINAL}" manifest ICON.PNG ICON_256.PNG \
-        app.tgz cmd config app )
+        app.tgz cmd config )
     rm -f "${STAGE}/app.tgz"
 fi
 if [ ! -f "${FINAL}" ]; then

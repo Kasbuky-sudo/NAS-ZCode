@@ -25,14 +25,13 @@ find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null |
 
 mkdir -p "${TRIM_PKGVAR}/data" "${TRIM_PKGVAR}/etc" "${TRIM_PKGVAR}/log" "${TRIM_PKGVAR}/workspace"
 
-### 访问令牌（唯一事实来源 = ${TRIM_PKGVAR}/etc/token）
-### 1) 向导填了 wizard_token → 用它
-### 2) 否则沿用已有 token（升级/重装场景，避免令牌漂移）
-### 3) 都没有 → 生成随机值
-### 生成后立刻写进 ui/config 的入口 URL，面板点开即自动带 token 完成鉴权。
+### 访问令牌：向导字段 wizard_path（标签「访问令牌」）是唯一事实来源。
+### fnOS 用它替换 ui/config 里 url 的 ${wizard_path} 占位符，面板入口自动带上
+### /?token=…；这里把同一值落盘到 ${TRIM_PKGVAR}/etc/token，供 cmd/main 启动
+### 时作为 --token 传给服务端。向导值缺失时沿用旧文件 / 生成随机值兜底。
 TOKEN_FILE="${TRIM_PKGVAR}/etc/token"
-if [ -n "${wizard_token:-}" ]; then
-    TOKEN="${wizard_token}"
+if [ -n "${wizard_path:-${wizard_token:-}}" ]; then
+    TOKEN="${wizard_path:-${wizard_token}}"
 elif [ -s "${TOKEN_FILE}" ]; then
     TOKEN="$(cat "${TOKEN_FILE}")"
 else
@@ -40,11 +39,6 @@ else
 fi
 printf '%s' "${TOKEN}" > "${TOKEN_FILE}"
 chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
-
-UI_CONFIG="${TRIM_APPDEST}/ui/config"
-if [ -f "${UI_CONFIG}" ]; then
-    sed -i "s|__ZCODE_TOKEN__|${TOKEN}|g" "${UI_CONFIG}" 2>/dev/null || true
-fi
 
 chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" "${TRIM_PKGETC}" 2>/dev/null || true
 exit 0

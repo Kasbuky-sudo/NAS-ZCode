@@ -4,12 +4,22 @@
     "items": [
       {
         "type": "tips",
-        "helpText": "令牌留空提交 = 保持当前令牌不变。修改后需在应用中心重启 ZCode 生效；桌面图标入口会自动携带新令牌。首次安装时如未自定义，系统已生成随机令牌。"
+        "helpText": "修改访问令牌并保存后，fnOS 会用它重新生成桌面入口 URL（/?token=…），需重启应用使服务端生效。令牌请使用 8-64 位字母、数字、下划线或中划线。"
       },
       {
         "type": "text",
-        "field": "wizard_token",
-        "label": "访问令牌（留空保持不变）"
+        "field": "wizard_path",
+        "label": "访问令牌",
+        "rules": [
+          {
+            "required": true,
+            "message": "访问令牌不能为空"
+          },
+          {
+            "pattern": "^[A-Za-z0-9_-]{8,64}$",
+            "message": "请使用 8-64 位字母、数字、下划线或中划线"
+          }
+        ]
       }
     ]
   }

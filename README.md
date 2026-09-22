@@ -19,6 +19,17 @@
 
 端口默认 **8988**。首个飞牛版本需要真机验收，请先在测试设备安装。
 
+## 访问令牌（重要）
+
+ZCode Web 等于把一个能执行命令的 AI agent 和终端开在 8988 端口上，所以带访问令牌：
+
+- **安装时**向导会要求填一个「访问令牌」（随便一串 8-64 位字母数字即可；也可留空由系统生成随机值）。
+- 桌面图标**自动携带**该令牌：fnOS 把向导值替换进入口路径（`/<令牌>`），页面加载后自动种鉴权 cookie，点开即用，平时无需手输。
+- 想换令牌：应用中心 → 已安装 → ZCode → 应用设置 → 改「访问令牌」→ 重启应用。
+- 令牌机制说明：服务端只对 `/ws`、`/ws/*`、`/api/*` 鉴权（静态页放行），鉴权同时接受 `?token=` 与 `zcode_lite_token` cookie；打包时给 `web/index.html` 注入了一小段脚本，把入口路径里的令牌写进该 cookie，因此面板 iframe 与直接访问都可用。
+
+> 注意：飞牛的面板入口**会丢弃 URL 查询串**，所以不能用 `/?token=…` 的形式，只能把令牌放在路径里。
+
 ## 工作区
 
 应用安装后会创建共享目录 `zcode/workspace` 作为默认工作区（文件管理器可见）。让 ZCode 操作已有目录（如某个共享文件夹）时，在「应用中心 → 已安装 → ZCode → 设置 → 访问权限」添加授权目录，然后重启应用。
@@ -48,6 +59,11 @@ bash packaging/fnOS/scripts/build.sh
 ```
 
 也可以指定运行时包路径：`bash packaging/fnOS/scripts/build.sh --runtime /path/to/zcode-3.14.1.tar.gz`。
+
+验收变体：`DEP_APPS=none bash packaging/fnOS/scripts/build.sh ...` 会剥离 manifest 里的
+`install_dep_apps` 声明（产物名带 `-nodep` 后缀）。用途：Node 运行时已装好时，绕过
+App Center 对「声明依赖的本地 fpk」的拦截，便于 trim-cli 自动化安装验收——正式分发请用
+默认变体（带依赖声明，新装用户会自动装上 Node.js v22）。
 
 ## 目录结构
 

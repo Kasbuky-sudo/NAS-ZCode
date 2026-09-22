@@ -1,6 +1,6 @@
 #!/bin/bash
-# 升级后：新包的 ui/config 覆盖了旧文件，这里重新把当前令牌写回入口 URL，
-# 并补齐 runtime 可执行位。用户数据（含令牌）保留在 TRIM_PKGVAR。
+# 升级后：补齐 runtime 可执行位，并把当前令牌落盘（入口 URL 由 fnOS
+# 依据 wizard_path 向导值自动生成，无需改文件）。用户数据保留在 TRIM_PKGVAR。
 set -e
 
 APP="zcode"
@@ -19,8 +19,8 @@ find "${TRIM_APPDEST}/runtime" -name '*.node' -exec chmod +x {} \; 2>/dev/null |
 
 TOKEN_FILE="${TRIM_PKGVAR}/etc/token"
 mkdir -p "${TRIM_PKGVAR}/etc"
-if [ -n "${wizard_token:-}" ]; then
-    TOKEN="${wizard_token}"
+if [ -n "${wizard_path:-${wizard_token:-}}" ]; then
+    TOKEN="${wizard_path:-${wizard_token}}"
 elif [ -s "${TOKEN_FILE}" ]; then
     TOKEN="$(cat "${TOKEN_FILE}")"
 else
@@ -28,11 +28,6 @@ else
 fi
 printf '%s' "${TOKEN}" > "${TOKEN_FILE}"
 chmod 600 "${TOKEN_FILE}" 2>/dev/null || true
-
-UI_CONFIG="${TRIM_APPDEST}/ui/config"
-if [ -f "${UI_CONFIG}" ]; then
-    sed -i "s|__ZCODE_TOKEN__|${TOKEN}|g" "${UI_CONFIG}" 2>/dev/null || true
-fi
 
 chown -R "${TRIM_USERNAME}:${TRIM_GROUPNAME}" "${TRIM_PKGVAR}" 2>/dev/null || true
 exit 0

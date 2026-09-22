@@ -6,7 +6,7 @@
             "type": "iframe",
             "protocol": "http",
             "port": "8988",
-            "url": "/?token=__ZCODE_TOKEN__",
+            "url": "/${wizard_path}",
             "allUsers": true
         }
     }
