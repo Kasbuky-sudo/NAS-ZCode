@@ -31,7 +31,17 @@ DIST="${PKG_DIR}/dist"
 STAGE="${PKG_DIR}/.build-staging/${APP}"            # 交给 fnpack 的目录
 APP_DIR="${STAGE}/app"                              # 应用内容树（会打成 app.tgz）
 
-FNPACK="${FNPACK:-C:/Users/User/Desktop/FNOS/fnpack}"
+# fnpack 是 Windows exe；CI（Linux）没有，用社区等价实现：fpk 就是 tar.gz，
+# 手动按 fnpack 布局打包（app/ → app.tgz，与包根文件一起 gzip）。
+if [ -z "${FNPACK:-}" ]; then
+    if command -v fnpack > /dev/null 2>&1; then
+        FNPACK="fnpack"
+    elif [ -x "C:/Users/User/Desktop/FNOS/fnpack" ] || [ -f "C:/Users/User/Desktop/FNOS/fnpack" ]; then
+        FNPACK="C:/Users/User/Desktop/FNOS/fnpack"
+    else
+        FNPACK=""
+    fi
+fi
 NODE="${NODE:-node}"
 
 ### 本机 Windows 的 Git Bash shim 关闭了 MSYS 路径转换：
@@ -131,14 +141,27 @@ cp -r "${PKG_DIR}/config" "${STAGE}/config"
 chmod 755 "${STAGE}/cmd/"*
 
 # ── 5. 打包 ──────────────────────────────────────────────────
-# fnpack 把产物写在它自己的 CWD，所以 cd 到 dist 再调用
 FINAL="${DIST}/zcode-${VERSION}.fpk"
 rm -f "${FINAL}"
-echo "[build] fnpack build → ${FINAL}"
-( cd "${DIST}" && "${FNPACK}" build -d "$(winpath "${STAGE}")" )
 
-if [ ! -f "${FINAL}" ] && [ -f "${DIST}/zcode.fpk" ]; then
-    mv "${DIST}/zcode.fpk" "${FINAL}"
+if [ -n "${FNPACK}" ]; then
+    # fnpack 把产物写在它自己的 CWD，所以 cd 到 dist 再调用
+    echo "[build] fnpack build → ${FINAL}"
+    ( cd "${DIST}" && "${FNPACK}" build -d "$(winpath "${STAGE}")" )
+    if [ ! -f "${FINAL}" ] && [ -f "${DIST}/zcode.fpk" ]; then
+        mv "${DIST}/zcode.fpk" "${FINAL}"
+    fi
+else
+    # CI 等价打包：fpk = tar.gz，内部 app.tgz（app/ 目录）+ 包根其余文件。
+    # 布局与 fnpack build 产物一致（demoapp / 线上包同款），fnpack 仅省去调用。
+    echo "[build] fnpack 不可用，手动打包 → ${FINAL}"
+    APP_TGZ="${DIST}/.app.tgz"
+    ( cd "${APP_DIR}" && tar -czf "${APP_TGZ}" . )
+    cp "${APP_TGZ}" "${STAGE}/app.tgz"
+    rm -f "${APP_TGZ}"
+    ( cd "${STAGE}" && tar -czf "${FINAL}" manifest ICON.PNG ICON_256.PNG \
+        app.tgz cmd config app )
+    rm -f "${STAGE}/app.tgz"
 fi
 if [ ! -f "${FINAL}" ]; then
     echo "✗ 没有产出 ${FINAL}"
