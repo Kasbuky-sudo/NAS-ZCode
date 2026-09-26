@@ -1,5 +1,5 @@
 appname               = zcode
-version               = 3.14.2
+version               = 3.14.3
 display_name          = ZCode
 desc                  = Z.ai 开源的 AI 编程工作台（zai-org/ZCode）。飞牛原生打包版（非 Docker）：服务端跑在 NAS 上，浏览器 / 飞牛桌面直接使用完整工作台——Agent 对话、代码工作区、内置终端；登录态与工作区保存在 NAS 上，全设备共用一份。原生 Node.js 运行，复用应用中心的 Node.js v22，包内原生模块随官方预编译件分发，一个包同时支持 x86_64 与 arm64。
 platform              = all
