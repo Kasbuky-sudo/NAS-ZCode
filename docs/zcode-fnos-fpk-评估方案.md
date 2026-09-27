@@ -2,7 +2,7 @@
 
 - 评估对象：[zai-org/ZCode](https://github.com/zai-org/ZCode)（Apache-2.0，`main` 为 `3.14.0`，官方 CDN 在发 `3.14.1`）
 - 目标：飞牛 fnOS 原生应用包，**不使用 Docker**，**一个包同时支持 x86_64 与 arm64**
-- 本地可复用资产：`C:\Users\User\Desktop\FNOS\`（fnpack 1.2.3、demoapp 模板）、`NAS-NEM\packaging\fnOS\`（生产级 Node 应用打包模板）、`coolapk-nas\scripts\build_fpk.py`（构建管线）
+- 本地可复用资产：本地 FNOS 资产目录（fnpack 1.2.3、demoapp 模板）、`NAS-NEM\packaging\fnOS\`（生产级 Node 应用打包模板）、`coolapk-nas\scripts\build_fpk.py`（构建管线）
 - 日期：2026-09-22
 
 ---
@@ -274,7 +274,7 @@ ZCODE_FPK_APP='${TRIM_APPNAME}' \
 
 | 资产 | 路径 | 用途 |
 |---|---|---|
-| fnpack 1.2.3 | `C:\Users\User\Desktop\FNOS\fnpack` | 打包（`fnpack build -d <stage>`，产物写在 CWD） |
+| fnpack 1.2.3 | `<资产目录>/fnpack` | 打包（`fnpack build -d <stage>`，产物写在 CWD） |
 | 官方模板 | `FNOS\demoapp\` | manifest / config / wizard / cmd 骨架 |
 | **生产级 Node 应用模板** | `NAS-NEM\packaging\fnOS\`（cmd/main、manifest、build.sh、ui/config） | **主要基线**：跨卷 find_node、/proc 判活、端口就绪、runuser 环境、自检 |
 | 构建管线 | `coolapk-nas\scripts\build_fpk.py`、`NAS-NEM\...\build.sh` | 组织 stage 目录 + 自检 + 调 fnpack |

@@ -36,10 +36,12 @@ APP_DIR="${STAGE}/app"                              # 应用内容树（会打�
 if [ -z "${FNPACK:-}" ]; then
     if command -v fnpack > /dev/null 2>&1; then
         FNPACK="fnpack"
-    elif [ -x "C:/Users/User/Desktop/FNOS/fnpack" ] || [ -f "C:/Users/User/Desktop/FNOS/fnpack" ]; then
-        FNPACK="C:/Users/User/Desktop/FNOS/fnpack"
+    elif [ -f "${REPO}/fnpack" ]; then
+        FNPACK="${REPO}/fnpack"          # 仓库根放一份 fnpack 时自动使用
+    elif [ -f "${PKG_DIR}/fnpack" ]; then
+        FNPACK="${PKG_DIR}/fnpack"
     else
-        FNPACK=""
+        FNPACK=""                        # 落到 tar 等价打包路径
     fi
 fi
 NODE="${NODE:-node}"
